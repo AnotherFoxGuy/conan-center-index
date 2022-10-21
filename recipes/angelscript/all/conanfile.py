@@ -1,7 +1,9 @@
-from conans import CMake, ConanFile, tools
 import os
+from conan import ConanFile
+from conan.tools.files import get, load, save, rmdir,copy
+from conan.tools.cmake import CMakeToolchain, CMake,  cmake_layout
 
-required_conan_version = ">=1.43.0"
+required_conan_version = ">=1.52.0"
 
 
 class AngelScriptConan(ConanFile):
@@ -28,61 +30,55 @@ class AngelScriptConan(ConanFile):
     }
 
     short_paths = True
-    exports_sources = "CMakeLists.txt"
-    generators = "cmake"
-    _cmake = None
-
-    @property
-    def _source_subfolder(self):
-        return "source_subfolder"
-
-    @property
-    def _build_subfolder(self):
-        return "build_subfolder"
 
     @property
     def _is_msvc(self):
         return str(self.settings.compiler) in ["Visual Studio", "msvc"]
 
+    def export_sources(self):
+        copy(self, "CMakeLists.txt", self.recipe_folder, self.export_sources_folder)
+
+    def layout(self):
+        cmake_layout(self)
+
     def config_options(self):
         if self.settings.os == "Windows":
-            del self.options.fPIC
+            self.options.rm_safe("fPIC")
 
     def configure(self):
         if self.options.shared:
-            del self.options.fPIC
+            self.options.rm_safe("fPIC")
 
     def source(self):
         # Website blocks default user agent string.
-        tools.get(
+        get(self,
             **self.conan_data["sources"][self.version],
-            destination=self._source_subfolder,
+            destination=self.source_folder,
             headers={"User-Agent": "ConanCenter"},
             strip_root=True,
         )
 
-    def _configure_cmake(self):
-        if self._cmake:
-            return self._cmake
-        self._cmake = CMake(self)
-        self._cmake.definitions["AS_NO_EXCEPTIONS"] = self.options.no_exceptions
-        self._cmake.configure(build_folder=self._build_subfolder)
-        return self._cmake
+    def generate(self):
+        tc = CMakeToolchain(self)
+        tc.variables["AS_NO_EXCEPTIONS"] = self.options.no_exceptions
+        tc.variables["BUILD_SHARED_LIBS"] = self.options.shared
+        tc.generate()
 
     def build(self):
-        cmake = self._configure_cmake()
+        cmake = CMake(self)
+        cmake.configure()
         cmake.build()
 
     def _extract_license(self):
-        header = tools.load(os.path.join(self._source_subfolder, "angelscript", "include", "angelscript.h"))
-        tools.save("LICENSE", header[header.find("/*", 1) + 3 : header.find("*/", 1)])
+        header = load(self, os.path.join(self.package_folder, "include", "angelscript.h"))
+        save(self, "LICENSE", header[header.find("/*", 1) + 3 : header.find("*/", 1)])
 
     def package(self):
-        self._extract_license()
-        self.copy("LICENSE", dst="licenses")
-        cmake = self._configure_cmake()
+        cmake = CMake(self)
         cmake.install()
-        tools.rmdir(os.path.join(self.package_folder, "lib", "cmake"))
+        self._extract_license()
+        copy(self, "LICENSE", self.build_folder, os.path.join(self.package_folder, "licenses"), keep_path=False)
+        rmdir(self, os.path.join(self.package_folder, "lib", "cmake"))
 
     def package_info(self):
         self.cpp_info.set_property("cmake_file_name", "Angelscript")
