@@ -100,9 +100,10 @@ class LcmsConan(ConanFile):
             properties = {
                 "WholeProgramOptimization": lto,
             }
+            build_type = 'Release' if (self.settings.build_type == "RelWithDebInfo" or self.settings.build_type == "Release") else 'Debug'
             # run build
             msbuild = MSBuild(self)
-            msbuild.build("lcms2.sln", targets=[target], platforms={"x86": "Win32"},
+            msbuild.build("lcms2.sln", targets=[target], platforms={"x86": "Win32"}, build_type=build_type,
                           upgrade_project=upgrade_project, properties=properties)
 
     def _configure_autotools(self):
